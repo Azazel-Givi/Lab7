@@ -1,0 +1,130 @@
+package Server;
+
+import java.io.*;
+import java.net.*;
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.channels.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.Set;
+
+import Exception.*;
+import FromTask.*;
+
+public class Server extends Object {
+    final int serverPort = 5432;
+    private String url = "jdbc:postgresql://pg:5432/studs";//возможно нужно вынестi в переменную оружения
+    private String user = "s312632";
+    private String passwd = "rsl255";
+ public Server(){
+     goServer();
+ }
+
+    public void goServer(){
+        System.out.println("Сервер запущен");
+        PostgresQL ql=new PostgresQL(url,user,passwd);
+        try {
+            Connection connection= null;
+            try {
+                connection = ql.connectWithDataBase();
+                Coordinates coordinates=new Coordinates(1, (float) 5);
+                HumanBeing humanBeing=new HumanBeing("OTS0",coordinates,true,true,154, "45", WeaponType.SHOTGUN, Mood.FRENZY,new Car("auto", true),"OTS");
+                ql.getCollection();
+                if(!PostgresQL.getCreation()){
+                ql.createTable(connection);
+            }
+                ql.addHumanBeingToBase(humanBeing,connection);
+            } catch (SQLException|NullPointerException throwables) {
+                System.out.println("Database connection problems");
+            }
+            connect()
+
+        } catch (IOException | ClassNotFoundException | IdException | IndexNotFoundException i) {
+            System.out.println("Соединение прервано");
+        }
+
+    }
+     public void connect() {
+            try {
+                System.out.println("Сервер запущен");
+                ServerSocketChannel server = ServerSocketChannel.open();
+                server.bind(new InetSocketAddress(serverPort));
+                server.configureBlocking(false);
+                Selector selector = Selector.open();
+                SelectionKey key = server.register(selector, SelectionKey.OP_ACCEPT);
+                while (true) {
+                    selector.select();
+                    Set<SelectionKey> readyKeys = selector.selectedKeys();
+                    Iterator<SelectionKey> iterator = readyKeys.iterator();
+                    while (iterator.hasNext()){
+                        ServerSocketChannel server_now = (ServerSocketChannel) key.channel();
+                        //
+                        try {
+                            SocketChannel client = null;
+                            while (client == null) {
+                                System.out.println("accept");
+                                client = server_now.accept();
+                            }
+                            App app = new App();
+                            Running r = new Running(app, client);
+                            BigRunning b = new BigRunning(app, client, r);
+                            b.start();
+                        } catch (IOException i) {
+                            System.out.println("IOException in method connect");
+                            return;
+                        }
+                        //
+
+                        iterator.next();
+                        iterator.remove();
+                    }
+                }
+            } catch (IOException i) {
+                System.out.println("Соединение прервано");
+                i.printStackTrace();
+            }
+    }
+
+    public class BigRunning extends Thread {
+        SocketChannel client;
+        App app;
+        Running r;
+        public BigRunning(App app, SocketChannel client, Running r){
+            this.client = client;
+            this.app = app;
+            this.r = r;
+        }
+
+        public void run() {
+            while (client.isOpen() && !app.getExit()) {
+                try {
+                    System.out.println("НОВЫЙ КРУГ");
+                    Thread thread_read = new Thread(r::read);
+                    thread_read.start();
+                    thread_read.join();
+                    if (app.getRequest() != null) {
+                        Thread thread_work = new Thread(r::work);
+                        System.out.println("этап работы");
+                        thread_work.start();
+                        thread_work.join();
+                    }
+                    if (app.getAnswer() != null) {
+                        Thread thread_write = new Thread(r::write);
+                        System.out.println("этап записи");
+                        thread_write.start();
+                        thread_write.join();
+                    }
+                } catch(InterruptedException i){
+                    System.out.println("Соединение прервано");
+                    break;
+                }
+            }
+        }
+    }
+
+
+}
